@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Companies Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: sans-serif;
+        }
+        #map-tables-wrapper {
+            display: flex;
+            height: 100%;
+        }
+        #map {
+            width: 70%;
+            height: 100%;
+        }
+        #company-tables-container {
+            width: 30%;
+            height: 100%;
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #county-filters-container {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        .county-checkbox-group {
+            display: inline-block;
+            margin-right: 15px;
+        }
+        .company-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        .company-table th, .company-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .company-table th {
+            background-color: #f0f0f0;
+        }
+        .company-table tbody tr {
+            cursor: pointer; /* Still for row click zoom */
+        }
+        .company-table tbody tr:hover {
+            background-color: #f5f5f5;
+        }
+        .activity-category {
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .company-table-submenu {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-top: 1px solid #ddd;
+            margin-top: 5px;
+            font-size: 0.9em;
+            display: none; /* Initially hidden */
+        }
+        .company-name-cell {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-right: 10px; /* Add some padding for icon spacing */
+        }
+        .company-name-text {
+            flex-grow: 1; /* Company name takes available space */
+            color: black; /* Default text color */
+            text-decoration: none; /* Remove default link underline if any */
+        }
+        .company-name-text:hover {
+            color: #333; /* Hover text color (darker black) */
+        }
+        .company-name-text.highlighted {
+            font-weight: bold; /* Highlighted text style */
+            color: darkblue;
+        }
+        .expand-icon {
+            cursor: pointer;
+            margin-left: 5px;
+            color: #777; /* Gray expand icon */
+        }
+         .expand-icon:hover {
+            color: #555; /* Darker gray on hover */
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map-tables-wrapper">
+        <div id="map"></div>
+        <div id="company-tables-container">
+            <div id="county-filters-container">
+                <b>Filter by County:</b>
+                <!-- County filter checkboxes will be added here by JavaScript -->
+            </div>
+            <!-- Tables will be inserted here by JavaScript -->
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var map = L.map('map').setView([46.00, 25.00], 6);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+
+            function parseCoordinate(coord) {
+                const parsed = parseFloat(coord);
+                return isNaN(parsed) ? null : parsed;
+            }
+
+            const activityColors = {};
+            const activityGroups = {};
+            const colorPalette = ['blue', 'red', 'green', 'orange', 'violet', 'yellow', 'grey', 'gold', 'black'];
+            let colorIndex = 0;
+
+            let companyData = [];
+            let highlightedMarker = null;
+            let openSubmenuRow = null;
+            let highlightedTableRowText = null; // Track highlighted table row text
+            let selectedCounties = new Set(); // To store selected counties for filtering
+
+            const defaultIconSize = [25, 41];
+            const highlightIconSize = [50, 82];
+
+            function resetHighlight() {
+                if (highlightedMarker) {
+                    const color = highlightedMarker.options.color;
+                    highlightedMarker.setIcon(L.icon({
+                        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                        iconSize:    defaultIconSize,
+                        iconAnchor:  [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize:  [41, 41]
+                    }));
+                    highlightedMarker = null;
+                }
+            }
+
+            function resetTableHighlight() {
+                if (highlightedTableRowText) {
+                    highlightedTableRowText.classList.remove('highlighted');
+                    highlightedTableRowText = null;
+                }
+            }
+
+
+            function formatFinancialValue(value) {
+                const num = parseFloat(value.replace(/\s/g, '').replace(',', '.'));
+                if (isNaN(num)) return 'N/A';
+
+                if (num >= 1000000) {
+                    return (num / 1000000).toFixed(2) + ' Mil';
+                } else if (num >= 1000) {
+                    return (num / 1000).toFixed(0) + ' K';
+                } else {
+                    return num.toFixed(0);
+                }
+            }
+
+            function renderCompanyTables() {
+                const tablesContainer = document.getElementById('company-tables-container');
+                tablesContainer.innerHTML = ''; // Clear existing tables
+
+                for (const activity in activityGroups) {
+                    // Filter companies based on selected counties
+                    const companiesInActivity = activityGroups[activity].filter(company => {
+                        if (selectedCounties.size === 0) return true; // If no counties selected, show all
+                        return selectedCounties.has(company.county);
+                    });
+
+                    if (companiesInActivity.length === 0) continue; // Skip activity if no companies after filtering
+
+                    const activityCategoryHeader = document.createElement('h2');
+                    activityCategoryHeader.textContent = activity;
+                    activityCategoryHeader.className = 'activity-category';
+                    tablesContainer.appendChild(activityCategoryHeader);
+
+                    const table = document.createElement('table');
+                    table.className = 'company-table';
+                    const thead = document.createElement('thead');
+                    const headerRow = document.createElement('tr');
+                    const headers = ['Company Name', 'Locality'];
+                    headers.forEach(headerText => {
+                        const th = document.createElement('th');
+                        th.textContent = headerText;
+                        headerRow.appendChild(th);
+                    });
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+
+                    const tbody = document.createElement('tbody');
+                    companiesInActivity.forEach(company => {
+                        const row = document.createElement('tr');
+                        row.companyData = company;
+                        row.onclick = function(event) {
+                            console.log("Table row clicked for:", company.company_name);
+                            console.log("Clicked 'this' (rowElement):", this);
+                            handleTableRowClick(this, company.company_name);
+                        };
+
+                        const companyNameCell = document.createElement('td');
+                        companyNameCell.className = 'company-name-cell';
+                        const companyNameTextSpan = document.createElement('span');
+                        companyNameTextSpan.className = 'company-name-text';
+                        companyNameTextSpan.textContent = company.company_name;
+                        companyNameTextSpan.ondblclick = function() { openGoogleSearch(company.company_name); };
+                        companyNameCell.appendChild(companyNameTextSpan);
+
+                        const expandIconSpan = document.createElement('span');
+                        expandIconSpan.className = 'expand-icon';
+                        expandIconSpan.innerHTML = '▼';
+                        expandIconSpan.onclick = function(event) {
+                            console.log("Expand icon clicked for:", company.company_name);
+                            event.stopPropagation();
+                            handleExpandIconClick(row, company.company_name);
+                        };
+                        companyNameCell.appendChild(expandIconSpan);
+                        row.appendChild(companyNameCell);
+
+                        const localityCell = document.createElement('td');
+                        localityCell.textContent = company.locality;
+                        row.appendChild(localityCell);
+
+                        const submenuRow = document.createElement('tr');
+                        submenuRow.className = 'company-table-submenu';
+                        const submenuCell = document.createElement('td');
+                        submenuCell.colSpan = 2;
+                        submenuRow.appendChild(submenuCell);
+                        tbody.appendChild(row);
+                        tbody.appendChild(submenuRow);
+                    });
+                    table.appendChild(tbody);
+                    tablesContainer.appendChild(table);
+                }
+            }
+
+
+            function createCountyFilters() { // Modified: counties are hardcoded
+                const filtersContainer = document.getElementById('county-filters-container');
+                const counties = ["Bucuresti", "Brasov", "Sibiu", "Prahova"]; // Hardcoded counties
+                counties.forEach(county => {
+                    const checkboxGroup = document.createElement('div');
+                    checkboxGroup.className = 'county-checkbox-group';
+
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.id = `county-${county.replace(/\s/g, '')}`; // create valid id
+                    checkbox.value = county;
+                    checkbox.addEventListener('change', function() {
+                        if (this.checked) {
+                            selectedCounties.add(county);
+                        } else {
+                            selectedCounties.delete(county);
+                        }
+                        renderCompanyTables(); // Re-render tables on filter change
+                    });
+
+                    const label = document.createElement('label');
+                    label.htmlFor = `county-${county.replace(/\s/g, '')}`;
+                    label.textContent = county;
+
+                    checkboxGroup.appendChild(checkbox);
+                    checkboxGroup.appendChild(label);
+                    filtersContainer.appendChild(checkboxGroup);
+                });
+            }
+
+
+            fetch('companies.json')
+                .then(response => response.json())
+                .then(companies => {
+                    companyData = companies;
+                    let markerCount = 0;
+                    companies.forEach(company => {
+                        var latitude = parseCoordinate(company.latitude);
+                        var longitude = parseCoordinate(company.longitude);
+
+
+                        if (latitude !== null && longitude !== null) {
+                            const activity = company['Obiect Activitate'] || 'Other Activity';
+                            if (!activityColors[activity]) {
+                                activityColors[activity] = colorPalette[colorIndex % colorPalette.length];
+                                colorIndex++;
+                            }
+                            const markerColor = activityColors[activity];
+                            const iconUrl = `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${markerColor}.png`;
+
+                            const coloredMarker = L.marker([latitude, longitude], {
+                                icon: L.icon({
+                                    iconUrl: iconUrl,
+                                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                                    iconSize:    defaultIconSize,
+                                    iconAnchor:  [12, 41],
+                                    popupAnchor: [1, -34],
+                                    shadowSize:  [41, 41]
+                                }),
+                                color: markerColor
+                            }).addTo(map);
+
+
+                            let popupContent = `<b ondblclick="openGoogleSearch('${encodeURIComponent(company.company_name)}')">${company.company_name}</b><br>Activity: ${activity}`;
+                            coloredMarker.bindPopup(popupContent);
+
+
+                            coloredMarker.on('click', function(e) {
+                                resetHighlight();
+                                highlightMarker(coloredMarker);
+                                resetTableHighlight();
+                            });
+
+                            markerCount++;
+                            company.marker = coloredMarker;
+
+                            if (!activityGroups[activity]) {
+                                activityGroups[activity] = [];
+                            }
+                            activityGroups[activity].push(company);
+                        }
+                    });
+
+                    createCountyFilters(); // Create filters after data load - no arguments needed now
+                    renderCompanyTables(); // Initial render of tables
+
+                    alert(`Loaded and displayed ${markerCount} company markers with color-coded activities.`);
+                })
+                .catch(error => {
+                    console.error('Error loading companies.json:', error);
+                    alert('Failed to load company data. Check console for details.');
+                });
+
+            function highlightMarker(marker) {
+                resetHighlight();
+                highlightedMarker = marker;
+                const color = marker.options.color;
+                marker.setIcon(L.icon({
+                    iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                    iconSize:    highlightIconSize,
+                    iconAnchor:  [25, 82],
+                    popupAnchor: [1, -64],
+                    shadowSize:  [82, 82]
+                }));
+                if (marker && typeof marker.bringToFront === 'function') {
+                    marker.bringToFront();
+                } else {
+                    console.error("Error: marker.bringToFront is not a function! Marker object:", marker);
+                }
+            }
+
+
+            function zoomToCompany(companyName) {
+                resetHighlight();
+                const company = companyData.find(c => c.company_name === companyName);
+                if (company && company.latitude && company.longitude && company.marker) {
+                    const lat = parseCoordinate(company.latitude);
+                    const lng = parseCoordinate(company.longitude);
+                    if (lat !== null && lng !== null) {
+                        map.setView([lat, lng], 15);
+                        highlightMarker(company.marker);
+                        company.marker.openPopup();
+                    } else {
+                        alert(`Coordinates for ${companyName} are invalid.`);
+                    }
+                } else {
+                    alert(`Company ${companyName} not found or missing data.`);
+                }
+            }
+
+            function handleTableRowClick(rowElement, companyName) {
+                console.log("handleTableRowClick CALLED for:", companyName);
+                zoomToCompany(companyName);
+                resetTableHighlight();
+                const companyNameTextElement = rowElement.querySelector('.company-name-text');
+                if (companyNameTextElement) {
+                    companyNameTextElement.classList.add('highlighted');
+                    highlightedTableRowText = companyNameTextElement;
+                }
+            }
+
+            function handleExpandIconClick(rowElement, companyName) {
+                console.log("handleExpandIconClick CALLED for:", companyName);
+                const submenuRowElement = rowElement.nextElementSibling;
+                if (openSubmenuRow === rowElement) {
+                    closeSubmenu(rowElement);
+                    openSubmenuRow = null;
+                } else {
+                    openSubmenu(rowElement, submenuRowElement);
+                    openSubmenuRow = rowElement;
+                }
+            }
+
+
+            function openSubmenu(rowElement, submenuRowElement) {
+                console.log("openSubmenu CALLED");
+                const company = rowElement.companyData;
+                const submenuCell = submenuRowElement.querySelector('td');
+
+                const financialData2023 = company['Financial Data'] && company['Financial Data']['2023'];
+                let revenue = 'N/A', activity = 'N/A', employees = 'N/A';
+                if (financialData2023) {
+                    revenue = formatFinancialValue(financialData2023['Cifra Afaceri']);
+                    employees = formatFinancialValue(financialData2023['Angajati']);
+                }
+                activity = company['Obiect Activitate'] || 'N/A';
+
+                submenuCell.innerHTML = `
+                    <b>Activity:</b> ${activity}<br>
+                    <b>Financial Data (2023):</b> Revenue: ${revenue}, Employees: ${employees}
+                `;
+                submenuRowElement.style.display = 'table-row';
+                rowElement.classList.add('submenu-open');
+            }
+
+            function closeSubmenu(rowElement) {
+                console.log("closeSubmenu CALLED");
+                const submenuRowElement = rowElement.nextElementSibling;
+                submenuRowElement.style.display = 'none';
+                rowElement.classList.remove('submenu-open');
+            }
+
+            function openGoogleSearch(companyName) {
+                const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(companyName)}`;
+                window.open(googleSearchUrl, '_blank');
+            }
+        });
+    </script>
+
+</body>
+</html>
