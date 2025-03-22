@@ -118,16 +118,20 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Normalization function for county names
+            function normalizeCountyName(name) {
+                return name
+                    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+                    .toLowerCase()
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            }
+
             var map = L.map('map').setView([46.00, 25.00], 6);
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 maxZoom: 19,
                 attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             }).addTo(map);
-
-            function parseCoordinate(coord) {
-                const parsed = parseFloat(coord);
-                return isNaN(parsed) ? null : parsed;
-            }
 
             const activityColors = {};
             const activityGroups = {};
@@ -168,26 +172,24 @@
             function formatFinancialValue(value) {
                 if (!value) return 'N/A';
                 const num = parseFloat(value.replace(/\s/g, '').replace(',', '.'));
-                if (isNaN(num)) return 'N/A';
-
-                if (num >= 1000000) {
-                    return (num / 1000000).toFixed(2) + ' Mil';
-                } else if (num >= 1000) {
-                    return (num / 1000).toFixed(0) + ' K';
-                }
-                return num.toFixed(0);
+                return isNaN(num) ? 'N/A' : 
+                    num >= 1000000 ? (num/1000000).toFixed(2) + ' Mil' :
+                    num >= 1000 ? (num/1000).toFixed(0) + ' K' :
+                    num.toFixed(0);
             }
 
             function renderCompanyTables() {
                 const tablesContainer = document.getElementById('company-tables-container');
                 tablesContainer.innerHTML = '';
 
-                for (const activity in activityGroups) {
-                    const companiesInActivity = activityGroups[activity].filter(company => 
-                        selectedCounties.size === 0 || selectedCounties.has(company.county)
-                    );
+                Object.entries(activityGroups).forEach(([activity, companies]) => {
+                    const filteredCompanies = companies.filter(company => {
+                        if (selectedCounties.size === 0) return true;
+                        const companyCounty = normalizeCountyName(company.county || '');
+                        return selectedCounties.has(companyCounty);
+                    });
 
-                    if (companiesInActivity.length === 0) continue;
+                    if (filteredCompanies.length === 0) return;
 
                     const activityHeader = document.createElement('h2');
                     activityHeader.className = 'activity-category';
@@ -197,6 +199,7 @@
                     const table = document.createElement('table');
                     table.className = 'company-table';
                     
+                    // Table header
                     const thead = document.createElement('thead');
                     const headerRow = document.createElement('tr');
                     ['Company Name', 'Locality'].forEach(text => {
@@ -207,12 +210,14 @@
                     thead.appendChild(headerRow);
                     table.appendChild(thead);
 
+                    // Table body
                     const tbody = document.createElement('tbody');
-                    companiesInActivity.forEach(company => {
+                    filteredCompanies.forEach(company => {
                         const row = document.createElement('tr');
                         row.companyData = company;
-                        row.onclick = (event) => handleTableRowClick(row, company.company_name);
+                        row.onclick = () => handleTableRowClick(row, company.company_name);
 
+                        // Company name cell
                         const nameCell = document.createElement('td');
                         nameCell.className = 'company-name-cell';
                         
@@ -224,8 +229,8 @@
                         const expandSpan = document.createElement('span');
                         expandSpan.className = 'expand-icon';
                         expandSpan.innerHTML = '▼';
-                        expandSpan.onclick = (event) => {
-                            event.stopPropagation();
+                        expandSpan.onclick = (e) => {
+                            e.stopPropagation();
                             handleExpandIconClick(row, company.company_name);
                         };
 
@@ -233,10 +238,12 @@
                         nameCell.appendChild(expandSpan);
                         row.appendChild(nameCell);
 
+                        // Locality cell
                         const localityCell = document.createElement('td');
                         localityCell.textContent = company.locality;
                         row.appendChild(localityCell);
 
+                        // Submenu row
                         const submenuRow = document.createElement('tr');
                         submenuRow.className = 'company-table-submenu';
                         const submenuCell = document.createElement('td');
@@ -248,22 +255,24 @@
 
                     table.appendChild(tbody);
                     tablesContainer.appendChild(table);
-                }
+                });
             }
 
             function createCountyFilters() {
                 const container = document.getElementById('county-filters-container');
                 const counties = ["București", "Brașov", "Sibiu", "Prahova"];
+                
                 counties.forEach(county => {
                     const group = document.createElement('div');
                     group.className = 'county-checkbox-group';
 
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
-                    checkbox.id = `county-${county.replace(/\s/g, '')}`;
+                    checkbox.id = `county-${normalizeCountyName(county)}`;
                     checkbox.value = county;
                     checkbox.addEventListener('change', function() {
-                        this.checked ? selectedCounties.add(county) : selectedCounties.delete(county);
+                        const normalized = normalizeCountyName(county);
+                        this.checked ? selectedCounties.add(normalized) : selectedCounties.delete(normalized);
                         renderCompanyTables();
                     });
 
@@ -284,9 +293,9 @@
                     let markerCount = 0;
 
                     companies.forEach(company => {
-                        const lat = parseCoordinate(company.latitude);
-                        const lng = parseCoordinate(company.longitude);
-                        if (!lat || !lng) return;
+                        const lat = parseFloat(company.latitude);
+                        const lng = parseFloat(company.longitude);
+                        if (isNaN(lat) || isNaN(lng)) return;
 
                         const activity = company['Obiect Activitate'] || 'Other';
                         if (!activityColors[activity]) {
@@ -322,6 +331,10 @@
                         company.marker = marker;
                         markerCount++;
 
+                        // Normalize county name before grouping
+                        const normalizedCounty = normalizeCountyName(company.county || '');
+                        company.county = normalizedCounty;
+                        
                         if (!activityGroups[activity]) activityGroups[activity] = [];
                         activityGroups[activity].push(company);
                     });
@@ -388,9 +401,9 @@
                 const company = companyData.find(c => c.company_name === companyName);
                 if (!company?.marker) return;
                 
-                const lat = parseCoordinate(company.latitude);
-                const lng = parseCoordinate(company.longitude);
-                if (lat && lng) {
+                const lat = parseFloat(company.latitude);
+                const lng = parseFloat(company.longitude);
+                if (!isNaN(lat) && !isNaN(lng)) {
                     map.setView([lat, lng], 15);
                     highlightMarker(company.marker);
                     company.marker.openPopup();
