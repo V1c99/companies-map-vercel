@@ -170,6 +170,7 @@
             const defaultIconSize = [25, 41];
             const highlightIconSize = [50, 82];
 
+             // Moved resetHighlight and resetTableHighlight outside highlightMarker and handleTableRowClick to ensure they are always called before highlighting a new element
             function resetHighlight() {
                 if (highlightedMarker) {
                     const color = highlightedMarker.options.color;
@@ -191,6 +192,7 @@
                     highlightedTableRowText = null;
                 }
             }
+
 
             function formatFinancialValue(value) {
                 if (!value) return 'N/A';
@@ -341,9 +343,10 @@
                     `);
 
                         marker.on('click', () => {
+                            // Reset both highlights before highlighting the marker
                             resetHighlight();
-                            highlightMarker(marker);
                             resetTableHighlight();
+                            highlightMarker(marker);
                             highlightTableRow(company.company_name);
                         });
 
@@ -367,7 +370,7 @@
                 });
 
             function highlightMarker(marker) {
-                resetHighlight();
+                // No need to reset highlights here, they are reset in the click handler
                 const color = marker.options.color;
                 marker.setIcon(L.icon({
                     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
@@ -382,9 +385,10 @@
             }
 
             function handleTableRowClick(row, companyName) {
+                 // Reset both highlights before highlighting the table row
                 resetHighlight();
-                zoomToCompany(companyName);
                 resetTableHighlight();
+                zoomToCompany(companyName);
                 highlightTableRow(companyName);
             }
 
