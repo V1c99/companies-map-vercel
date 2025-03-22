@@ -83,13 +83,14 @@
             flex-grow: 1;
             color: black;
             text-decoration: none;
+            transition: all 0.2s ease;
         }
         .company-name-text:hover {
             color: #333;
         }
         .company-name-text.highlighted {
-            font-weight: bold;
-            color: darkblue;
+            font-weight: bold !important;
+            color: darkblue !important;
         }
         .expand-icon {
             cursor: pointer;
@@ -106,7 +107,7 @@
         <div id="map"></div>
         <div id="sidebar">
             <div id="county-filters-container">
-                <b>Filtreaza Judete:</b>
+                <b>Filter by County:</b>
                 <!-- Checkboxes will be inserted here -->
             </div>
             <div id="company-tables-container">
@@ -118,10 +119,9 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Normalization function for county names
             function normalizeCountyName(name) {
                 return name
-                    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove diacritics
+                    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
                     .toLowerCase()
                     .replace(/\s+/g, ' ')
                     .trim();
@@ -199,7 +199,6 @@
                     const table = document.createElement('table');
                     table.className = 'company-table';
                     
-                    // Table header
                     const thead = document.createElement('thead');
                     const headerRow = document.createElement('tr');
                     ['Company Name', 'Locality'].forEach(text => {
@@ -210,14 +209,12 @@
                     thead.appendChild(headerRow);
                     table.appendChild(thead);
 
-                    // Table body
                     const tbody = document.createElement('tbody');
                     filteredCompanies.forEach(company => {
                         const row = document.createElement('tr');
                         row.companyData = company;
                         row.onclick = () => handleTableRowClick(row, company.company_name);
 
-                        // Company name cell
                         const nameCell = document.createElement('td');
                         nameCell.className = 'company-name-cell';
                         
@@ -238,12 +235,10 @@
                         nameCell.appendChild(expandSpan);
                         row.appendChild(nameCell);
 
-                        // Locality cell
                         const localityCell = document.createElement('td');
                         localityCell.textContent = company.locality;
                         row.appendChild(localityCell);
 
-                        // Submenu row
                         const submenuRow = document.createElement('tr');
                         submenuRow.className = 'company-table-submenu';
                         const submenuCell = document.createElement('td');
@@ -319,7 +314,7 @@
                             <b ondblclick="openGoogleSearch('${encodeURIComponent(company.company_name)}')">
                                 ${company.company_name}
                             </b><br>
-                            ${company.locality}
+                            <b>Activity:</b> ${company['Obiect Activitate'] || 'N/A'}
                         `);
 
                         marker.on('click', () => {
@@ -331,7 +326,6 @@
                         company.marker = marker;
                         markerCount++;
 
-                        // Normalize county name before grouping
                         const normalizedCounty = normalizeCountyName(company.county || '');
                         company.county = normalizedCounty;
                         
@@ -349,6 +343,7 @@
                 });
 
             function highlightMarker(marker) {
+                resetHighlight();
                 const color = marker.options.color;
                 marker.setIcon(L.icon({
                     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
@@ -363,6 +358,7 @@
             }
 
             function handleTableRowClick(row, companyName) {
+                resetHighlight();
                 zoomToCompany(companyName);
                 resetTableHighlight();
                 const textElement = row.querySelector('.company-name-text');
