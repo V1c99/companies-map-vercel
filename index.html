@@ -100,6 +100,11 @@
         .expand-icon:hover {
             color: #555;
         }
+        .calculation-results {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #ddd;
+        }
     </style>
 </head>
 <body>
@@ -108,10 +113,8 @@
         <div id="sidebar">
             <div id="county-filters-container">
                 <b>Filter by County:</b>
-                <!-- Checkboxes will be inserted here -->
             </div>
             <div id="company-tables-container">
-                <!-- Tables will be inserted here -->
             </div>
         </div>
     </div>
@@ -119,6 +122,14 @@
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const COUNTY_STATIONS = {
+                'brasov': { lat: 45.65288729370937, lng: 25.612067277551045 },
+                'prahova': { lat: 44.92466580410939, lng: 25.99461211518395 },
+                'sibiu': { lat: 45.79974801287916, lng: 24.161740276718486 },
+                'bucuresti': { lat: 44.44649464539585, lng: 26.074306430097096 }
+            };
+            const AVERAGE_SPEED = 50;
+
             function normalizeCountyName(name) {
                 return name
                     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -146,6 +157,20 @@
 
             const defaultIconSize = [25, 41];
             const highlightIconSize = [50, 82];
+
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                const R = 6371e3;
+                const φ1 = lat1 * Math.PI/180;
+                const φ2 = lat2 * Math.PI/180;
+                const Δφ = (lat2-lat1) * Math.PI/180;
+                const Δλ = (lon2-lon1) * Math.PI/180;
+
+                const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                          Math.cos(φ1) * Math.cos(φ2) *
+                          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                return R * c;
+            }
 
             function resetHighlight() {
                 if (highlightedMarker) {
@@ -336,7 +361,6 @@
 
                     createCountyFilters();
                     renderCompanyTables();
-                    alert(`Loaded ${markerCount} companies`);
                 })
                 .catch(error => {
                     console.error('Error:', error);
@@ -383,10 +407,38 @@
                 const cell = submenuRow.querySelector('td');
                 const financials = company['Financial Data']?.['2023'] || {};
                 
+                let distanceInfo = '';
+                const county = normalizeCountyName(company.county || '');
+                if (COUNTY_STATIONS[county] && company.latitude && company.longitude) {
+                    try {
+                        const station = COUNTY_STATIONS[county];
+                        const dist = calculateDistance(
+                            parseFloat(company.latitude),
+                            parseFloat(company.longitude),
+                            station.lat,
+                            station.lng
+                        );
+                        
+                        const distanceKm = (dist / 1000).toFixed(1);
+                        const timeMinutes = Math.round((distanceKm / AVERAGE_SPEED) * 60);
+                        
+                        distanceInfo = `
+                            <div class="calculation-results">
+                                <b>Distance from station:</b> ${distanceKm} km<br>
+                                <b>Estimated drive time:</b> ~${timeMinutes} minutes
+                            </div>
+                        `;
+                    } catch(e) {
+                        console.error('Distance calculation error:', e);
+                        distanceInfo = `<div class="calculation-results">Distance data unavailable</div>`;
+                    }
+                }
+
                 cell.innerHTML = `
                     <b>Activity:</b> ${company['Obiect Activitate'] || 'N/A'}<br>
                     <b>Revenue:</b> ${formatFinancialValue(financials['Cifra Afaceri'])}<br>
                     <b>Employees:</b> ${formatFinancialValue(financials['Angajati'])}
+                    ${distanceInfo}
                 `;
             }
 
