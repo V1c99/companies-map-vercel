@@ -19,9 +19,14 @@
             width: 70%;
             height: 100%;
         }
-        #company-tables-container {
+        #sidebar {
             width: 30%;
             height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #company-tables-container {
+            flex: 1;
             overflow-y: auto;
             padding: 10px;
             box-sizing: border-box;
@@ -49,7 +54,7 @@
             background-color: #f0f0f0;
         }
         .company-table tbody tr {
-            cursor: pointer; /* Still for row click zoom */
+            cursor: pointer;
         }
         .company-table tbody tr:hover {
             background-color: #f5f5f5;
@@ -66,46 +71,47 @@
             border-top: 1px solid #ddd;
             margin-top: 5px;
             font-size: 0.9em;
-            display: none; /* Initially hidden */
+            display: none;
         }
         .company-name-cell {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-right: 10px; /* Add some padding for icon spacing */
+            padding-right: 10px;
         }
         .company-name-text {
-            flex-grow: 1; /* Company name takes available space */
-            color: black; /* Default text color */
-            text-decoration: none; /* Remove default link underline if any */
+            flex-grow: 1;
+            color: black;
+            text-decoration: none;
         }
         .company-name-text:hover {
-            color: #333; /* Hover text color (darker black) */
+            color: #333;
         }
         .company-name-text.highlighted {
-            font-weight: bold; /* Highlighted text style */
+            font-weight: bold;
             color: darkblue;
         }
         .expand-icon {
             cursor: pointer;
             margin-left: 5px;
-            color: #777; /* Gray expand icon */
+            color: #777;
         }
-         .expand-icon:hover {
-            color: #555; /* Darker gray on hover */
+        .expand-icon:hover {
+            color: #555;
         }
     </style>
 </head>
 <body>
-
     <div id="map-tables-wrapper">
         <div id="map"></div>
-        <div id="company-tables-container">
+        <div id="sidebar">
             <div id="county-filters-container">
                 <b>Filter by County:</b>
-                <!-- County filter checkboxes will be added here by JavaScript -->
+                <!-- Checkboxes will be inserted here -->
             </div>
-            <!-- Tables will be inserted here by JavaScript -->
+            <div id="company-tables-container">
+                <!-- Tables will be inserted here -->
+            </div>
         </div>
     </div>
 
@@ -131,8 +137,8 @@
             let companyData = [];
             let highlightedMarker = null;
             let openSubmenuRow = null;
-            let highlightedTableRowText = null; // Track highlighted table row text
-            let selectedCounties = new Set(); // To store selected counties for filtering
+            let highlightedTableRowText = null;
+            let selectedCounties = new Set();
 
             const defaultIconSize = [25, 41];
             const highlightIconSize = [50, 82];
@@ -143,10 +149,10 @@
                     highlightedMarker.setIcon(L.icon({
                         iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
                         shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                        iconSize:    defaultIconSize,
-                        iconAnchor:  [12, 41],
+                        iconSize: defaultIconSize,
+                        iconAnchor: [12, 41],
                         popupAnchor: [1, -34],
-                        shadowSize:  [41, 41]
+                        shadowSize: [41, 41]
                     }));
                     highlightedMarker = null;
                 }
@@ -159,8 +165,8 @@
                 }
             }
 
-
             function formatFinancialValue(value) {
+                if (!value) return 'N/A';
                 const num = parseFloat(value.replace(/\s/g, '').replace(',', '.'));
                 if (isNaN(num)) return 'N/A';
 
@@ -168,37 +174,34 @@
                     return (num / 1000000).toFixed(2) + ' Mil';
                 } else if (num >= 1000) {
                     return (num / 1000).toFixed(0) + ' K';
-                } else {
-                    return num.toFixed(0);
                 }
+                return num.toFixed(0);
             }
 
             function renderCompanyTables() {
                 const tablesContainer = document.getElementById('company-tables-container');
-                tablesContainer.innerHTML = ''; // Clear existing tables
+                tablesContainer.innerHTML = '';
 
                 for (const activity in activityGroups) {
-                    // Filter companies based on selected counties
-                    const companiesInActivity = activityGroups[activity].filter(company => {
-                        if (selectedCounties.size === 0) return true; // If no counties selected, show all
-                        return selectedCounties.has(company.county);
-                    });
+                    const companiesInActivity = activityGroups[activity].filter(company => 
+                        selectedCounties.size === 0 || selectedCounties.has(company.county)
+                    );
 
-                    if (companiesInActivity.length === 0) continue; // Skip activity if no companies after filtering
+                    if (companiesInActivity.length === 0) continue;
 
-                    const activityCategoryHeader = document.createElement('h2');
-                    activityCategoryHeader.textContent = activity;
-                    activityCategoryHeader.className = 'activity-category';
-                    tablesContainer.appendChild(activityCategoryHeader);
+                    const activityHeader = document.createElement('h2');
+                    activityHeader.className = 'activity-category';
+                    activityHeader.textContent = activity;
+                    tablesContainer.appendChild(activityHeader);
 
                     const table = document.createElement('table');
                     table.className = 'company-table';
+                    
                     const thead = document.createElement('thead');
                     const headerRow = document.createElement('tr');
-                    const headers = ['Company Name', 'Locality'];
-                    headers.forEach(headerText => {
+                    ['Company Name', 'Locality'].forEach(text => {
                         const th = document.createElement('th');
-                        th.textContent = headerText;
+                        th.textContent = text;
                         headerRow.appendChild(th);
                     });
                     thead.appendChild(headerRow);
@@ -208,30 +211,27 @@
                     companiesInActivity.forEach(company => {
                         const row = document.createElement('tr');
                         row.companyData = company;
-                        row.onclick = function(event) {
-                            console.log("Table row clicked for:", company.company_name);
-                            console.log("Clicked 'this' (rowElement):", this);
-                            handleTableRowClick(this, company.company_name);
-                        };
+                        row.onclick = (event) => handleTableRowClick(row, company.company_name);
 
-                        const companyNameCell = document.createElement('td');
-                        companyNameCell.className = 'company-name-cell';
-                        const companyNameTextSpan = document.createElement('span');
-                        companyNameTextSpan.className = 'company-name-text';
-                        companyNameTextSpan.textContent = company.company_name;
-                        companyNameTextSpan.ondblclick = function() { openGoogleSearch(company.company_name); };
-                        companyNameCell.appendChild(companyNameTextSpan);
-
-                        const expandIconSpan = document.createElement('span');
-                        expandIconSpan.className = 'expand-icon';
-                        expandIconSpan.innerHTML = '▼';
-                        expandIconSpan.onclick = function(event) {
-                            console.log("Expand icon clicked for:", company.company_name);
+                        const nameCell = document.createElement('td');
+                        nameCell.className = 'company-name-cell';
+                        
+                        const nameSpan = document.createElement('span');
+                        nameSpan.className = 'company-name-text';
+                        nameSpan.textContent = company.company_name;
+                        nameSpan.ondblclick = () => openGoogleSearch(company.company_name);
+                        
+                        const expandSpan = document.createElement('span');
+                        expandSpan.className = 'expand-icon';
+                        expandSpan.innerHTML = '▼';
+                        expandSpan.onclick = (event) => {
                             event.stopPropagation();
                             handleExpandIconClick(row, company.company_name);
                         };
-                        companyNameCell.appendChild(expandIconSpan);
-                        row.appendChild(companyNameCell);
+
+                        nameCell.appendChild(nameSpan);
+                        nameCell.appendChild(expandSpan);
+                        row.appendChild(nameCell);
 
                         const localityCell = document.createElement('td');
                         localityCell.textContent = company.locality;
@@ -245,201 +245,162 @@
                         tbody.appendChild(row);
                         tbody.appendChild(submenuRow);
                     });
+
                     table.appendChild(tbody);
                     tablesContainer.appendChild(table);
                 }
             }
 
-
-            function createCountyFilters() { // Modified: counties are hardcoded
-                const filtersContainer = document.getElementById('county-filters-container');
-                const counties = ["Bucuresti", "Brasov", "Sibiu", "Prahova"]; // Hardcoded counties
+            function createCountyFilters() {
+                const container = document.getElementById('county-filters-container');
+                const counties = ["București", "Brașov", "Sibiu", "Prahova"];
                 counties.forEach(county => {
-                    const checkboxGroup = document.createElement('div');
-                    checkboxGroup.className = 'county-checkbox-group';
+                    const group = document.createElement('div');
+                    group.className = 'county-checkbox-group';
 
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
-                    checkbox.id = `county-${county.replace(/\s/g, '')}`; // create valid id
+                    checkbox.id = `county-${county.replace(/\s/g, '')}`;
                     checkbox.value = county;
                     checkbox.addEventListener('change', function() {
-                        if (this.checked) {
-                            selectedCounties.add(county);
-                        } else {
-                            selectedCounties.delete(county);
-                        }
-                        renderCompanyTables(); // Re-render tables on filter change
+                        this.checked ? selectedCounties.add(county) : selectedCounties.delete(county);
+                        renderCompanyTables();
                     });
 
                     const label = document.createElement('label');
-                    label.htmlFor = `county-${county.replace(/\s/g, '')}`;
+                    label.htmlFor = checkbox.id;
                     label.textContent = county;
 
-                    checkboxGroup.appendChild(checkbox);
-                    checkboxGroup.appendChild(label);
-                    filtersContainer.appendChild(checkboxGroup);
+                    group.appendChild(checkbox);
+                    group.appendChild(label);
+                    container.appendChild(group);
                 });
             }
-
 
             fetch('companies.json')
                 .then(response => response.json())
                 .then(companies => {
                     companyData = companies;
                     let markerCount = 0;
+
                     companies.forEach(company => {
-                        var latitude = parseCoordinate(company.latitude);
-                        var longitude = parseCoordinate(company.longitude);
+                        const lat = parseCoordinate(company.latitude);
+                        const lng = parseCoordinate(company.longitude);
+                        if (!lat || !lng) return;
 
-
-                        if (latitude !== null && longitude !== null) {
-                            const activity = company['Obiect Activitate'] || 'Other Activity';
-                            if (!activityColors[activity]) {
-                                activityColors[activity] = colorPalette[colorIndex % colorPalette.length];
-                                colorIndex++;
-                            }
-                            const markerColor = activityColors[activity];
-                            const iconUrl = `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${markerColor}.png`;
-
-                            const coloredMarker = L.marker([latitude, longitude], {
-                                icon: L.icon({
-                                    iconUrl: iconUrl,
-                                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                                    iconSize:    defaultIconSize,
-                                    iconAnchor:  [12, 41],
-                                    popupAnchor: [1, -34],
-                                    shadowSize:  [41, 41]
-                                }),
-                                color: markerColor
-                            }).addTo(map);
-
-
-                            let popupContent = `<b ondblclick="openGoogleSearch('${encodeURIComponent(company.company_name)}')">${company.company_name}</b><br>Activity: ${activity}`;
-                            coloredMarker.bindPopup(popupContent);
-
-
-                            coloredMarker.on('click', function(e) {
-                                resetHighlight();
-                                highlightMarker(coloredMarker);
-                                resetTableHighlight();
-                            });
-
-                            markerCount++;
-                            company.marker = coloredMarker;
-
-                            if (!activityGroups[activity]) {
-                                activityGroups[activity] = [];
-                            }
-                            activityGroups[activity].push(company);
+                        const activity = company['Obiect Activitate'] || 'Other';
+                        if (!activityColors[activity]) {
+                            activityColors[activity] = colorPalette[colorIndex % colorPalette.length];
+                            colorIndex++;
                         }
+
+                        const marker = L.marker([lat, lng], {
+                            icon: L.icon({
+                                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${activityColors[activity]}.png`,
+                                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+                                iconSize: defaultIconSize,
+                                iconAnchor: [12, 41],
+                                popupAnchor: [1, -34],
+                                shadowSize: [41, 41]
+                            }),
+                            color: activityColors[activity]
+                        }).addTo(map);
+
+                        marker.bindPopup(`
+                            <b ondblclick="openGoogleSearch('${encodeURIComponent(company.company_name)}')">
+                                ${company.company_name}
+                            </b><br>
+                            ${company.locality}
+                        `);
+
+                        marker.on('click', () => {
+                            resetHighlight();
+                            highlightMarker(marker);
+                            resetTableHighlight();
+                        });
+
+                        company.marker = marker;
+                        markerCount++;
+
+                        if (!activityGroups[activity]) activityGroups[activity] = [];
+                        activityGroups[activity].push(company);
                     });
 
-                    createCountyFilters(); // Create filters after data load - no arguments needed now
-                    renderCompanyTables(); // Initial render of tables
-
-                    alert(`Loaded and displayed ${markerCount} company markers with color-coded activities.`);
+                    createCountyFilters();
+                    renderCompanyTables();
+                    alert(`Loaded ${markerCount} companies`);
                 })
                 .catch(error => {
-                    console.error('Error loading companies.json:', error);
-                    alert('Failed to load company data. Check console for details.');
+                    console.error('Error:', error);
+                    alert('Failed to load company data');
                 });
 
             function highlightMarker(marker) {
-                resetHighlight();
-                highlightedMarker = marker;
                 const color = marker.options.color;
                 marker.setIcon(L.icon({
                     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-                    iconSize:    highlightIconSize,
-                    iconAnchor:  [25, 82],
+                    iconSize: highlightIconSize,
+                    iconAnchor: [25, 82],
                     popupAnchor: [1, -64],
-                    shadowSize:  [82, 82]
+                    shadowSize: [82, 82]
                 }));
-                if (marker && typeof marker.bringToFront === 'function') {
-                    marker.bringToFront();
-                } else {
-                    console.error("Error: marker.bringToFront is not a function! Marker object:", marker);
-                }
+                marker.bringToFront();
+                highlightedMarker = marker;
             }
 
-
-            function zoomToCompany(companyName) {
-                resetHighlight();
-                const company = companyData.find(c => c.company_name === companyName);
-                if (company && company.latitude && company.longitude && company.marker) {
-                    const lat = parseCoordinate(company.latitude);
-                    const lng = parseCoordinate(company.longitude);
-                    if (lat !== null && lng !== null) {
-                        map.setView([lat, lng], 15);
-                        highlightMarker(company.marker);
-                        company.marker.openPopup();
-                    } else {
-                        alert(`Coordinates for ${companyName} are invalid.`);
-                    }
-                } else {
-                    alert(`Company ${companyName} not found or missing data.`);
-                }
-            }
-
-            function handleTableRowClick(rowElement, companyName) {
-                console.log("handleTableRowClick CALLED for:", companyName);
+            function handleTableRowClick(row, companyName) {
                 zoomToCompany(companyName);
                 resetTableHighlight();
-                const companyNameTextElement = rowElement.querySelector('.company-name-text');
-                if (companyNameTextElement) {
-                    companyNameTextElement.classList.add('highlighted');
-                    highlightedTableRowText = companyNameTextElement;
+                const textElement = row.querySelector('.company-name-text');
+                if (textElement) {
+                    textElement.classList.add('highlighted');
+                    highlightedTableRowText = textElement;
                 }
             }
 
-            function handleExpandIconClick(rowElement, companyName) {
-                console.log("handleExpandIconClick CALLED for:", companyName);
-                const submenuRowElement = rowElement.nextElementSibling;
-                if (openSubmenuRow === rowElement) {
-                    closeSubmenu(rowElement);
+            function handleExpandIconClick(row, companyName) {
+                const submenuRow = row.nextElementSibling;
+                if (openSubmenuRow === row) {
+                    submenuRow.style.display = 'none';
                     openSubmenuRow = null;
                 } else {
-                    openSubmenu(rowElement, submenuRowElement);
-                    openSubmenuRow = rowElement;
+                    if (openSubmenuRow) openSubmenuRow.nextElementSibling.style.display = 'none';
+                    populateSubmenu(row, submenuRow);
+                    submenuRow.style.display = 'table-row';
+                    openSubmenuRow = row;
                 }
             }
 
-
-            function openSubmenu(rowElement, submenuRowElement) {
-                console.log("openSubmenu CALLED");
-                const company = rowElement.companyData;
-                const submenuCell = submenuRowElement.querySelector('td');
-
-                const financialData2023 = company['Financial Data'] && company['Financial Data']['2023'];
-                let revenue = 'N/A', activity = 'N/A', employees = 'N/A';
-                if (financialData2023) {
-                    revenue = formatFinancialValue(financialData2023['Cifra Afaceri']);
-                    employees = formatFinancialValue(financialData2023['Angajati']);
-                }
-                activity = company['Obiect Activitate'] || 'N/A';
-
-                submenuCell.innerHTML = `
-                    <b>Activity:</b> ${activity}<br>
-                    <b>Financial Data (2023):</b> Revenue: ${revenue}, Employees: ${employees}
+            function populateSubmenu(row, submenuRow) {
+                const company = row.companyData;
+                const cell = submenuRow.querySelector('td');
+                const financials = company['Financial Data']?.['2023'] || {};
+                
+                cell.innerHTML = `
+                    <b>Activity:</b> ${company['Obiect Activitate'] || 'N/A'}<br>
+                    <b>Revenue:</b> ${formatFinancialValue(financials['Cifra Afaceri'])}<br>
+                    <b>Employees:</b> ${formatFinancialValue(financials['Angajati'])}
                 `;
-                submenuRowElement.style.display = 'table-row';
-                rowElement.classList.add('submenu-open');
             }
 
-            function closeSubmenu(rowElement) {
-                console.log("closeSubmenu CALLED");
-                const submenuRowElement = rowElement.nextElementSibling;
-                submenuRowElement.style.display = 'none';
-                rowElement.classList.remove('submenu-open');
+            function zoomToCompany(companyName) {
+                const company = companyData.find(c => c.company_name === companyName);
+                if (!company?.marker) return;
+                
+                const lat = parseCoordinate(company.latitude);
+                const lng = parseCoordinate(company.longitude);
+                if (lat && lng) {
+                    map.setView([lat, lng], 15);
+                    highlightMarker(company.marker);
+                    company.marker.openPopup();
+                }
             }
 
-            function openGoogleSearch(companyName) {
-                const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(companyName)}`;
-                window.open(googleSearchUrl, '_blank');
-            }
+            window.openGoogleSearch = function(companyName) {
+                window.open(`https://www.google.com/search?q=${encodeURIComponent(companyName)}`, '_blank');
+            };
         });
     </script>
-
 </body>
 </html>
